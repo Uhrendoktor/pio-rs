@@ -46,14 +46,6 @@ pub enum JmpCondition {
     OutputShiftRegisterNotEmpty = 0b111,
 }
 
-#[repr(u8)]
-#[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq, Eq)]
-pub enum WaitSource {
-    GPIO = 0b00,
-    PIN = 0b01,
-    IRQ = 0b10,
-    JMPPIN = 0b11,
-}
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq, Eq)]
@@ -148,6 +140,47 @@ pub enum IrqIndexMode {
     NEXT = 0b11,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WaitSource {
+    Gpio(u8),
+    Pin(u8),
+    Irq {
+        direction: IrqIndexMode,
+        irq: u8,
+    },
+    JmpPin {
+        offset: Option<u8>,
+    },
+}
+impl WaitSource {
+    pub const fn opcode(&self) -> u8 {
+        match self {
+            WaitSource::Gpio(_) => 0b00,
+            WaitSource::Pin(_) => 0b01,
+            WaitSource::Irq { .. } => 0b10,
+            WaitSource::JmpPin { .. } => 0b11,
+        }
+    }
+}
+impl TryFrom<(u8, u8)> for WaitSource {
+    type Error = ();
+
+    fn try_from((o0, o1): (u8, u8)) -> Result<Self, Self::Error> {
+        match o0 & 0b11 {
+            0b00 => Ok(WaitSource::Gpio(o1 & 0b11111)),
+            0b01 => Ok(WaitSource::Pin(o1 & 0b11111)),
+            0b10 => Ok(WaitSource::Irq {
+                direction: IrqIndexMode::try_from_primitive((o1 >> 3) & 0b11).unwrap(),
+                irq: o1 & 0b111,
+            }),
+            0b11 => Ok(WaitSource::JmpPin {
+                offset: Some(o1 & 0b11111),
+            }),
+            _ => Err(()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum InstructionOperands {
     JMP {
@@ -159,8 +192,6 @@ pub enum InstructionOperands {
         /// 0 -> wait for 0
         polarity: u8,
         source: WaitSource,
-        index: u8,
-        relative: bool,
     },
     IN {
         source: InSource,
@@ -224,18 +255,31 @@ impl InstructionOperands {
             InstructionOperands::WAIT {
                 polarity,
                 source,
-                index,
-                relative,
             } => {
-                if *relative && !matches!(*source, WaitSource::IRQ) {
-                    panic!("relative flag should only be used with WaitSource::IRQ");
-                }
-                if matches!(*source, WaitSource::IRQ) && *index > 7 {
-                    panic!("Index for WaitSource::IRQ should be in range 0..=7");
-                }
+                let o1 = match source {
+                    WaitSource::Gpio(gpio) => {
+                        *gpio & 0b11111
+                    },
+                    WaitSource::Pin(pin) => {
+                        *pin & 0b11111
+                    },
+                    WaitSource::Irq { direction, irq } => {
+                        // TODO: how does rel work?
+                        if *irq > 7 {
+                            panic!("Index for WaitSource::IRQ should be in range 0..=7");
+                        }
+                        (*direction as u8) << 3 | *irq & 0b111
+                    },
+                    WaitSource::JmpPin { offset } => {
+                        match offset {
+                            Some(offset) => *offset,
+                            None => 0
+                        }
+                    }
+                };
                 (
-                    ((*polarity) << 2) | (*source as u8),
-                    *index | (if *relative { 0b10000 } else { 0 }),
+                    ((*polarity) << 2) | (source.opcode()),
+                    o1
                 )
             }
             InstructionOperands::IN { source, bit_count } => {
@@ -315,17 +359,11 @@ impl InstructionOperands {
                     address: o1,
                 }),
             0b001 => {
-                WaitSource::try_from(o0 & 0b011)
+                WaitSource::try_from((o0, o1))
                     .ok()
                     .map(|source| InstructionOperands::WAIT {
                         polarity: o0 >> 2,
                         source,
-                        index: if source == WaitSource::IRQ {
-                            o1 & 0b00111
-                        } else {
-                            o1
-                        },
-                        relative: source == WaitSource::IRQ && (o1 & 0b10000) != 0,
                     })
             }
             0b010 => InSource::try_from(o0)
@@ -593,7 +631,7 @@ impl<const PROGRAM_SIZE: usize> Assembler<PROGRAM_SIZE> {
                     }
                 }
                 InstructionOperands::WAIT { source, .. } => {
-                    if source == WaitSource::JMPPIN {
+                    if matches!(source, WaitSource::JmpPin { .. }) {
                         return PioVersion::V1;
                     }
                 }
@@ -737,12 +775,10 @@ impl<const PROGRAM_SIZE: usize> Assembler<PROGRAM_SIZE> {
     instr!(
         /// Emit a `wait` instruction with `polarity` from `source` with `index` which may be
         /// `relative`.
-        wait(self, polarity: u8, source: WaitSource, index: u8, relative: bool) {
+        wait(self, polarity: u8, source: WaitSource) {
             InstructionOperands::WAIT {
                 polarity,
                 source,
-                index,
-                relative,
             }
         }
     );
@@ -1031,33 +1067,33 @@ macro_rules! instr_test {
 }
 
 instr_test!(
-    wait(0, WaitSource::IRQ, 2, false),
+    wait(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }),
     0b001_00000_010_00010,
     PioVersion::V0
 );
 instr_test!(
-    wait(1, WaitSource::IRQ, 7, false),
+    wait(1, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }),
     0b001_00000_110_00111,
     PioVersion::V0
 );
 instr_test!(
-    wait(1, WaitSource::GPIO, 16, false),
+    wait(1, WaitSource::Gpio(16)),
     0b001_00000_100_10000,
     PioVersion::V0
 );
 instr_test!(
-    wait_with_delay(0, WaitSource::IRQ, 2, false, 30),
+    wait_with_delay(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }, 30),
     0b001_11110_010_00010,
     PioVersion::V0
 );
 instr_test!(
-    wait_with_side_set(0, WaitSource::IRQ, 2, false, 0b10101),
+    wait_with_side_set(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }, 0b10101),
     0b001_10101_010_00010,
     SideSet::new(false, 5, false),
     PioVersion::V0
 );
 instr_test!(
-    wait(0, WaitSource::IRQ, 2, true),
+    wait(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::REL }),
     0b001_00000_010_10010,
     PioVersion::V0
 );
@@ -1066,7 +1102,7 @@ instr_test!(
 #[should_panic]
 fn test_wait_relative_not_used_on_irq() {
     let mut a = Assembler::<32>::new();
-    a.wait(0, WaitSource::PIN, 10, true);
+    a.wait(0, WaitSource::Pin(10));
     a.assemble_program();
 }
 
@@ -1166,7 +1202,7 @@ instr_test!(
 );
 
 instr_test!(
-    wait(0, WaitSource::JMPPIN, 0, false),
+    wait(0, WaitSource::JmpPin{ offset: None }),
     0b001_00000_0110_0000,
     PioVersion::V1
 );

@@ -172,6 +172,19 @@ impl From<ParsedMovSource> for MovSrcInternal {
 }
 
 #[derive(Debug)]
+pub(crate) enum ParsedWaitSource<'input> {
+    Gpio(Value<'input>),
+    Pin(Value<'input>),
+    Irq {
+        direction: IrqIndexMode,
+        irq: Value<'input>,
+    },
+    JmpPin {
+        offset: Option<Value<'input>>,
+    },
+}
+
+#[derive(Debug)]
 pub(crate) enum ParsedOperands<'input> {
     JMP {
         condition: JmpCondition,
@@ -179,9 +192,7 @@ pub(crate) enum ParsedOperands<'input> {
     },
     WAIT {
         polarity: Value<'input>,
-        source: WaitSource,
-        index: Value<'input>,
-        relative: bool,
+        source: ParsedWaitSource<'input>,
     },
     IN {
         source: InSource,
@@ -226,13 +237,19 @@ impl ParsedOperands<'_> {
             ParsedOperands::WAIT {
                 polarity,
                 source,
-                index,
-                relative,
             } => InstructionOperands::WAIT {
                 polarity: polarity.reify(state) as u8,
-                source: *source,
-                index: index.reify(state) as u8,
-                relative: *relative,
+                source: match source {
+                    ParsedWaitSource::Gpio(v) => WaitSource::Gpio(v.reify(state) as u8),
+                    ParsedWaitSource::Pin(v) => WaitSource::Pin(v.reify(state) as u8),
+                    ParsedWaitSource::Irq { direction, irq } => WaitSource::Irq {
+                        direction: *direction,
+                        irq: irq.reify(state) as u8,
+                    },
+                    ParsedWaitSource::JmpPin { offset } => WaitSource::JmpPin {
+                        offset: offset.as_ref().map(|o| o.reify(state) as u8),
+                    },
+                },
             },
             ParsedOperands::IN { source, bit_count } => InstructionOperands::IN {
                 source: *source,
