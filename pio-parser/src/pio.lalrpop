@@ -48,6 +48,7 @@ match {
   r"(?i)pins" => "pins",
   r"(?i)pin" => "pin",
   r"(?i)gpio" => "gpio",
+  r"(?i)jmppin" => "jmppin",
   r"(?i)null" => "null",
   r"(?i)isr" => "isr",
   r"(?i)osr" => "osr",
@@ -224,6 +225,7 @@ WaitSource: WaitSource = {
   "gpio" => WaitSource::GPIO,
   "pin" => WaitSource::PIN,
   "irq" => WaitSource::IRQ,
+  "jmppin" => WaitSource::JMPPIN,
 };
 
 InSource: InSource = {
