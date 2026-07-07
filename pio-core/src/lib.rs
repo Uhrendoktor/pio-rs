@@ -264,7 +264,7 @@ impl InstructionOperands {
                         *pin & 0b11111
                     },
                     WaitSource::Irq { direction, irq } => {
-                        // TODO: how does rel work?
+
                         if *irq > 7 {
                             panic!("Index for WaitSource::IRQ should be in range 0..=7");
                         }
