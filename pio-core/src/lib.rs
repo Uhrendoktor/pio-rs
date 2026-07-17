@@ -625,20 +625,14 @@ impl<const PROGRAM_SIZE: usize> Assembler<PROGRAM_SIZE> {
             match opr {
                 InstructionOperands::MOVFROMRX { .. } => return PioVersion::V1,
                 InstructionOperands::MOVTORX { .. } => return PioVersion::V1,
-                InstructionOperands::MOV { destination, .. } => {
-                    if destination == MovDestination::PINDIRS {
-                        return PioVersion::V1;
-                    }
+                InstructionOperands::MOV { destination: MovDestination::PINDIRS, .. }  => {
+                    return PioVersion::V1;
                 }
-                InstructionOperands::WAIT { source, .. } => {
-                    if matches!(source, WaitSource::JmpPin { .. }) {
-                        return PioVersion::V1;
-                    }
+                InstructionOperands::WAIT { source: WaitSource::JmpPin { .. }, .. } => {
+                    return PioVersion::V1;
                 }
-                InstructionOperands::IRQ { index_mode, .. } => {
-                    if index_mode == IrqIndexMode::PREV || index_mode == IrqIndexMode::NEXT {
-                        return PioVersion::V1;
-                    }
+                InstructionOperands::IRQ { index_mode: IrqIndexMode::PREV | IrqIndexMode::NEXT, .. } => {
+                    return PioVersion::V1;
                 }
                 _ => (),
             }

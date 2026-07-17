@@ -370,7 +370,7 @@ impl<const PROGRAM_SIZE: usize> Parser<PROGRAM_SIZE> {
     /// separated by `.program` directives.
     pub fn parse_file(
         source: &str,
-    ) -> Result<HashMap<String, ProgramWithDefines<HashMap<String, i32>, PROGRAM_SIZE>>, ParseError>
+    ) -> Result<HashMap<String, ProgramWithDefines<HashMap<String, i32>, PROGRAM_SIZE>>, ParseError<'_>>
     {
         match parser::FileParser::new().parse(source) {
             Ok(f) => {
@@ -407,7 +407,7 @@ impl<const PROGRAM_SIZE: usize> Parser<PROGRAM_SIZE> {
     /// Parse a single PIO program, without the `.program` directive.
     pub fn parse_program(
         source: &str,
-    ) -> Result<ProgramWithDefines<HashMap<String, i32>, PROGRAM_SIZE>, ParseError> {
+    ) -> Result<ProgramWithDefines<HashMap<String, i32>, PROGRAM_SIZE>, ParseError<'_>> {
         match parser::ProgramParser::new().parse(source) {
             Ok(p) => Ok(Parser::process(&p, &mut FileState::default())),
             Err(e) => Err(e),
