@@ -1063,7 +1063,7 @@ instr_test!(
     wait(
         1,
         WaitSource::Irq {
-            irq: 2,
+            irq: 7,
             index_mode: IrqIndexMode::DIRECT
         }
     ),
