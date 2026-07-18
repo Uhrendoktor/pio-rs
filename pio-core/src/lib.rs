@@ -46,7 +46,6 @@ pub enum JmpCondition {
     OutputShiftRegisterNotEmpty = 0b111,
 }
 
-
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, TryFromPrimitive, PartialEq, Eq)]
 pub enum InSource {
@@ -144,13 +143,8 @@ pub enum IrqIndexMode {
 pub enum WaitSource {
     Gpio(u8),
     Pin(u8),
-    Irq {
-        direction: IrqIndexMode,
-        irq: u8,
-    },
-    JmpPin {
-        offset: Option<u8>,
-    },
+    Irq { index_mode: IrqIndexMode, irq: u8 },
+    JmpPin { offset: Option<u8> },
 }
 impl WaitSource {
     pub const fn opcode(&self) -> u8 {
@@ -170,7 +164,7 @@ impl TryFrom<(u8, u8)> for WaitSource {
             0b00 => Ok(WaitSource::Gpio(o1 & 0b11111)),
             0b01 => Ok(WaitSource::Pin(o1 & 0b11111)),
             0b10 => Ok(WaitSource::Irq {
-                direction: IrqIndexMode::try_from_primitive((o1 >> 3) & 0b11).unwrap(),
+                index_mode: IrqIndexMode::try_from_primitive((o1 >> 3) & 0b11).unwrap(),
                 irq: o1 & 0b111,
             }),
             0b11 => Ok(WaitSource::JmpPin {
@@ -252,35 +246,22 @@ impl InstructionOperands {
     const fn operands(&self) -> (u8, u8) {
         match self {
             InstructionOperands::JMP { condition, address } => (*condition as u8, *address),
-            InstructionOperands::WAIT {
-                polarity,
-                source,
-            } => {
+            InstructionOperands::WAIT { polarity, source } => {
                 let o1 = match source {
-                    WaitSource::Gpio(gpio) => {
-                        *gpio & 0b11111
-                    },
-                    WaitSource::Pin(pin) => {
-                        *pin & 0b11111
-                    },
-                    WaitSource::Irq { direction, irq } => {
-
+                    WaitSource::Gpio(gpio) => *gpio & 0b11111,
+                    WaitSource::Pin(pin) => *pin & 0b11111,
+                    WaitSource::Irq { index_mode, irq } => {
                         if *irq > 7 {
                             panic!("Index for WaitSource::IRQ should be in range 0..=7");
                         }
-                        (*direction as u8) << 3 | *irq & 0b111
-                    },
-                    WaitSource::JmpPin { offset } => {
-                        match offset {
-                            Some(offset) => *offset,
-                            None => 0
-                        }
+                        (*index_mode as u8) << 3 | *irq & 0b111
                     }
+                    WaitSource::JmpPin { offset } => match offset {
+                        Some(offset) => *offset,
+                        None => 0,
+                    },
                 };
-                (
-                    ((*polarity) << 2) | (source.opcode()),
-                    o1
-                )
+                (((*polarity) << 2) | (source.opcode()), o1)
             }
             InstructionOperands::IN { source, bit_count } => {
                 if *bit_count == 0 || *bit_count > 32 {
@@ -358,14 +339,12 @@ impl InstructionOperands {
                     condition,
                     address: o1,
                 }),
-            0b001 => {
-                WaitSource::try_from((o0, o1))
-                    .ok()
-                    .map(|source| InstructionOperands::WAIT {
-                        polarity: o0 >> 2,
-                        source,
-                    })
-            }
+            0b001 => WaitSource::try_from((o0, o1))
+                .ok()
+                .map(|source| InstructionOperands::WAIT {
+                    polarity: o0 >> 2,
+                    source,
+                }),
             0b010 => InSource::try_from(o0)
                 .ok()
                 .map(|source| InstructionOperands::IN {
@@ -625,13 +604,22 @@ impl<const PROGRAM_SIZE: usize> Assembler<PROGRAM_SIZE> {
             match opr {
                 InstructionOperands::MOVFROMRX { .. } => return PioVersion::V1,
                 InstructionOperands::MOVTORX { .. } => return PioVersion::V1,
-                InstructionOperands::MOV { destination: MovDestination::PINDIRS, .. }  => {
+                InstructionOperands::MOV {
+                    destination: MovDestination::PINDIRS,
+                    ..
+                } => {
                     return PioVersion::V1;
                 }
-                InstructionOperands::WAIT { source: WaitSource::JmpPin { .. }, .. } => {
+                InstructionOperands::WAIT {
+                    source: WaitSource::JmpPin { .. },
+                    ..
+                } => {
                     return PioVersion::V1;
                 }
-                InstructionOperands::IRQ { index_mode: IrqIndexMode::PREV | IrqIndexMode::NEXT, .. } => {
+                InstructionOperands::IRQ {
+                    index_mode: IrqIndexMode::PREV | IrqIndexMode::NEXT,
+                    ..
+                } => {
                     return PioVersion::V1;
                 }
                 _ => (),
@@ -1061,12 +1049,24 @@ macro_rules! instr_test {
 }
 
 instr_test!(
-    wait(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }),
+    wait(
+        0,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::DIRECT
+        }
+    ),
     0b001_00000_010_00010,
     PioVersion::V0
 );
 instr_test!(
-    wait(1, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }),
+    wait(
+        1,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::DIRECT
+        }
+    ),
     0b001_00000_110_00111,
     PioVersion::V0
 );
@@ -1076,18 +1076,38 @@ instr_test!(
     PioVersion::V0
 );
 instr_test!(
-    wait_with_delay(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }, 30),
+    wait_with_delay(
+        0,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::DIRECT
+        },
+        30
+    ),
     0b001_11110_010_00010,
     PioVersion::V0
 );
 instr_test!(
-    wait_with_side_set(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::DIRECT }, 0b10101),
+    wait_with_side_set(
+        0,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::DIRECT
+        },
+        0b10101
+    ),
     0b001_10101_010_00010,
     SideSet::new(false, 5, false),
     PioVersion::V0
 );
 instr_test!(
-    wait(0, WaitSource::Irq{ irq: 2, direction: IrqIndexMode::REL }),
+    wait(
+        0,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::REL
+        }
+    ),
     0b001_00000_010_10010,
     PioVersion::V0
 );
@@ -1196,7 +1216,7 @@ instr_test!(
 );
 
 instr_test!(
-    wait(0, WaitSource::JmpPin{ offset: None }),
+    wait(0, WaitSource::JmpPin { offset: None }),
     0b001_00000_0110_0000,
     PioVersion::V1
 );

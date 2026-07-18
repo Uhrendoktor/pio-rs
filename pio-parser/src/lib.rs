@@ -176,7 +176,7 @@ pub(crate) enum ParsedWaitSource<'input> {
     Gpio(Value<'input>),
     Pin(Value<'input>),
     Irq {
-        direction: IrqIndexMode,
+        index_mode: IrqIndexMode,
         irq: Value<'input>,
     },
     JmpPin {
@@ -234,16 +234,13 @@ impl ParsedOperands<'_> {
                 condition: *condition,
                 address: address.reify(state) as u8,
             },
-            ParsedOperands::WAIT {
-                polarity,
-                source,
-            } => InstructionOperands::WAIT {
+            ParsedOperands::WAIT { polarity, source } => InstructionOperands::WAIT {
                 polarity: polarity.reify(state) as u8,
                 source: match source {
                     ParsedWaitSource::Gpio(v) => WaitSource::Gpio(v.reify(state) as u8),
                     ParsedWaitSource::Pin(v) => WaitSource::Pin(v.reify(state) as u8),
-                    ParsedWaitSource::Irq { direction, irq } => WaitSource::Irq {
-                        direction: *direction,
+                    ParsedWaitSource::Irq { index_mode, irq } => WaitSource::Irq {
+                        index_mode: *index_mode,
                         irq: irq.reify(state) as u8,
                     },
                     ParsedWaitSource::JmpPin { offset } => WaitSource::JmpPin {
@@ -370,8 +367,10 @@ impl<const PROGRAM_SIZE: usize> Parser<PROGRAM_SIZE> {
     /// separated by `.program` directives.
     pub fn parse_file(
         source: &str,
-    ) -> Result<HashMap<String, ProgramWithDefines<HashMap<String, i32>, PROGRAM_SIZE>>, ParseError<'_>>
-    {
+    ) -> Result<
+        HashMap<String, ProgramWithDefines<HashMap<String, i32>, PROGRAM_SIZE>>,
+        ParseError<'_>,
+    > {
         match parser::FileParser::new().parse(source) {
             Ok(f) => {
                 let mut state = FileState::default();

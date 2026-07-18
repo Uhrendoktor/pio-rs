@@ -223,9 +223,9 @@ JmpCondition: JmpCondition = {
 ParsedWaitSource: ParsedWaitSource<'input> = {
   "gpio" ","? <gpio:Value> => ParsedWaitSource::Gpio(gpio),
   "pin" ","? <pin:Value> => ParsedWaitSource::Pin(pin),
-  "irq" ","? <direction:IrqIndexMode?> <irq:Value> <relative:"rel"?> =>
+  "irq" ","? <index_mode:IrqIndexMode?> <irq:Value> <relative:"rel"?> =>
       ParsedWaitSource::Irq {
-          direction: if relative.is_some() { IrqIndexMode::REL } else { direction.unwrap_or(IrqIndexMode::DIRECT) },
+          index_mode: if relative.is_some() { IrqIndexMode::REL } else { index_mode.unwrap_or(IrqIndexMode::DIRECT) },
           irq: irq,
       },
   "jmppin" ","? <offset:("+" <Value>)?> =>
