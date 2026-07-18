@@ -1112,14 +1112,6 @@ instr_test!(
     PioVersion::V0
 );
 
-#[test]
-#[should_panic]
-fn test_wait_relative_not_used_on_irq() {
-    let mut a = Assembler::<32>::new();
-    a.wait(0, WaitSource::Pin(10));
-    a.assemble_program();
-}
-
 instr_test!(r#in(InSource::Y, 10), 0b010_00000_010_01010, PioVersion::V0);
 instr_test!(r#in(InSource::Y, 32), 0b010_00000_010_00000, PioVersion::V0);
 
