@@ -611,7 +611,12 @@ impl<const PROGRAM_SIZE: usize> Assembler<PROGRAM_SIZE> {
                     return PioVersion::V1;
                 }
                 InstructionOperands::WAIT {
-                    source: WaitSource::JmpPin { .. },
+                    source:
+                        WaitSource::JmpPin { .. }
+                        | WaitSource::Irq {
+                            index_mode: IrqIndexMode::PREV | IrqIndexMode::NEXT,
+                            ..
+                        },
                     ..
                 } => {
                     return PioVersion::V1;
