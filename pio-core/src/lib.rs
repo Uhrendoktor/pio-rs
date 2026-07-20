@@ -1053,6 +1053,11 @@ macro_rules! instr_test {
     };
 }
 
+// Tests for:
+// RP2040: wait <polarity> irq <irq_num> (rel)
+// RP235x: wait <polarity> (prev | next) irq <irq_num> (rel)
+
+// wait 0 irq 2
 instr_test!(
     wait(
         0,
@@ -1064,6 +1069,7 @@ instr_test!(
     0b001_00000_010_00010,
     PioVersion::V0
 );
+// wait 1 irq 7
 instr_test!(
     wait(
         1,
@@ -1075,11 +1081,7 @@ instr_test!(
     0b001_00000_110_00111,
     PioVersion::V0
 );
-instr_test!(
-    wait(1, WaitSource::Gpio(16)),
-    0b001_00000_100_10000,
-    PioVersion::V0
-);
+// wait 0 irq 2 [30]
 instr_test!(
     wait_with_delay(
         0,
@@ -1092,6 +1094,7 @@ instr_test!(
     0b001_11110_010_00010,
     PioVersion::V0
 );
+// wait 0 irq 2 side 5
 instr_test!(
     wait_with_side_set(
         0,
@@ -1105,6 +1108,7 @@ instr_test!(
     SideSet::new(false, 5, false),
     PioVersion::V0
 );
+// wait 0 irq 2 (rel)
 instr_test!(
     wait(
         0,
@@ -1114,6 +1118,94 @@ instr_test!(
         }
     ),
     0b001_00000_010_10010,
+    PioVersion::V0
+);
+// RP235x only: wait 0 prev irq 2
+instr_test!(
+    wait(
+        0,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::PREV
+        }
+    ),
+    0b001_00000_010_01010,
+    PioVersion::V1
+);
+// RP235x only: wait 0 next irq 2
+instr_test!(
+    wait(
+        0,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::NEXT
+        }
+    ),
+    0b001_00000_010_11010,
+    PioVersion::V1
+);
+// RP235x only: wait 1 next irq 2 [30]
+instr_test!(
+    wait_with_delay(
+        1,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::NEXT
+        },
+        30
+    ),
+    0b001_11110_110_11010,
+    PioVersion::V1
+);
+// RP235x only: wait 0 next irq 2 side 5
+instr_test!(
+    wait_with_side_set(
+        0,
+        WaitSource::Irq {
+            irq: 2,
+            index_mode: IrqIndexMode::NEXT
+        },
+        0b10101
+    ),
+    0b001_10101_010_11010,
+    SideSet::new(false, 5, false),
+    PioVersion::V1
+);
+
+// Tests for:
+// RP2040: -
+// RP235x: wait <polarity> jmppin (+ <pin_offset>)
+
+// RP235x only: wait 0 jmppin
+instr_test!(
+    wait(0, WaitSource::JmpPin { offset: None }),
+    0b001_00000_011_00000,
+    PioVersion::V1
+);
+// RP235x only: wait 1 jmppin + 17
+instr_test!(
+    wait(1, WaitSource::JmpPin { offset: Some(17) }),
+    0b001_00000_111_10001,
+    PioVersion::V1
+);
+// RP235x only: wait 1 jmppin + 2 [30]
+instr_test!(
+    wait_with_delay(1, WaitSource::JmpPin { offset: Some(2) }, 30),
+    0b001_11110_111_00010,
+    PioVersion::V1
+);
+// RP235x only: wait 1 jmppin + 2 side 5
+instr_test!(
+    wait_with_side_set(1, WaitSource::JmpPin { offset: Some(2) }, 0b10101),
+    0b001_10101_111_00010,
+    SideSet::new(false, 5, false),
+    PioVersion::V1
+);
+
+// wait 1 gpio 16
+instr_test!(
+    wait(1, WaitSource::Gpio(16)),
+    0b001_00000_100_10000,
     PioVersion::V0
 );
 
